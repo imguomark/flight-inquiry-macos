@@ -9,6 +9,82 @@ public struct CtripAPIConfiguration: Sendable {
     public var apiKey: String?
     public var useMockData: Bool
 
+    public init(endpoint: URL = URL(string: "https://api.example.invalid/ctrip/flights")!, apiKey: String? = nil, useMockData: Bool = true) {
+        self.endpoint = endpoint
+        self.apiKey = apiKey
+        self.useMockData = useMockData
+    }
+
+    public static var fromEnvironment: CtripAPIConfiguration {
+        let env = ProcessInfo.processInfo.environment
+        let endpoint = URL(string: env["FLIGHT_API_ENDPOINT"] ?? env["CTRIP_API_ENDPOINT"] ?? "https://api.example.invalid/ctrip/flights")!
+        let provider = env["FLIGHT_INQUIRY_PROVIDER"]?.lowercased() ?? "mock"
+        return CtripAPIConfiguration(endpoint: endpoint, apiKey: env["FLIGHT_API_KEY"] ?? env["CTRIP_API_KEY"], useMockData: provider == "mock")
+    }
+}
+
+public struct CtripAPIClient: FlightProviding {
+    private let configuration: CtripAPIConfiguration
+    private let session: URLSession
+
+    public init(configuration: CtripAPIConfiguration = .fromEnvironment, session: URLSession = .shared) { self.configuration = configuration; self.session = session }
+
+    public func search(_ request: FlightSearchRequest) async throws -> [Flight] {
+        guard !request.origin.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !request.destination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw FlightSearchError.invalidRequest("Enter both an origin and destination.") }
+        guard request.passengers > 0 else { throw FlightSearchError.invalidRequest("Passenger count must be at least one.") }
+        if configuration.useMockData { return MockFlightData.flights(for: request) }
+        var components = URLComponents(url: configuration.endpoint, resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "origin", value: request.origin.uppercased()), URLQueryItem(name: "destination", value: request.destination.uppercased()), URLQueryItem(name: "date", value: Self.dateFormatter.string(from: request.date)), URLQueryItem(name: "passengers", value: String(request.passengers))]
+        guard let url = components?.url else { throw FlightSearchError.invalidRequest("The API endpoint is invalid.") }
+        var urlRequest = URLRequest(url: url)
+        if let apiKey = configuration.apiKey { urlRequest.setValue(apiKey, forHTTPHeaderField: "Authorization") }
+        do {
+            let (data, response) = try await session.data(for: urlRequest)
+            guard let httpResponse = response as? HTTPURLResponse else { throw FlightSearchError.invalidResponse }
+            guard (200..<300).contains(httpResponse.statusCode) else { throw FlightSearchError.server("The flight provider returned HTTP \(httpResponse.statusCode).") }
+            return try Self.decoder.decode(FlightResponse.self, from: data).flights
+        } catch let error as FlightSearchError { throw error } catch { throw FlightSearchError.network(error.localizedDescription) }
+    }
+
+    private static let dateFormatter: DateFormatter = { let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX"); return f }()
+    private static let decoder: JSONDecoder = { let d = JSONDecoder(); d.dateDecodingStrategy = .iso8601; return d }()
+}
+
+private struct FlightResponse: Decodable { let flights: [Flight] }
+
+extension Flight: Codable {
+    enum CodingKeys: String, CodingKey { case id, airline, flightNumber, departureTime, arrivalTime, durationMinutes, stops, price, currency }
+    public init(from decoder: Decoder) throws { let v = try decoder.container(keyedBy: CodingKeys.self); self.init(id: try v.decode(String.self, forKey: .id), airline: try v.decode(String.self, forKey: .airline), flightNumber: try v.decode(String.self, forKey: .flightNumber), departureTime: try v.decode(Date.self, forKey: .departureTime), arrivalTime: try v.decode(Date.self, forKey: .arrivalTime), durationMinutes: try v.decode(Int.self, forKey: .durationMinutes), stops: try v.decode(Int.self, forKey: .stops), price: try v.decode(Decimal.self, forKey: .price), currency: try v.decode(String.self, forKey: .currency)) }
+    public func encode(to encoder: Encoder) throws { var v = encoder.container(keyedBy: CodingKeys.self); try v.encode(id, forKey: .id); try v.encode(airline, forKey: .airline); try v.encode(flightNumber, forKey: .flightNumber); try v.encode(departureTime, forKey: .departureTime); try v.encode(arrivalTime, forKey: .arrivalTime); try v.encode(durationMinutes, forKey: .durationMinutes); try v.encode(stops, forKey: .stops); try v.encode(price, forKey: .price); try v.encode(currency, forKey: .currency) }
+}
+
+public enum MockFlightData {
+    public static func flights(for request: FlightSearchRequest) -> [Flight] {
+        let origin = request.origin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let destination = request.destination.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let route = "\(origin)-\(destination)"
+        let seed = route.unicodeScalars.reduce(0) { ($0 &* 31) &+ Int($1.value) }
+        let start = Calendar.current.date(bySettingHour: 7 + abs(seed) % 5, minute: 15, second: 0, of: request.date) ?? request.date
+        let airlines = [("Skyward Airlines", "SW"), ("Pacific Air", "PA"), ("MetroJet", "MJ")]
+        return airlines.enumerated().map { index, item in
+            let number = abs(seed &+ index * 137) % 900 + 100
+            let duration = 180 + abs(seed &+ index * 43) % 150
+            let stops = index == 1 ? 1 : 0
+            let departure = start.addingTimeInterval(Double(index * 2) * 3600)
+            return Flight(id: "mock-\(route)-\(index)", airline: item.0, flightNumber: "\(item.1) \(number)", departureTime: departure, arrivalTime: departure.addingTimeInterval(Double(duration) * 60), durationMinutes: duration, stops: stops, price: Decimal(220 + abs(seed &+ index * 71) % 380), currency: "USD")
+        }
+    }
+}import Foundation
+
+public protocol FlightProviding: Sendable {
+    func search(_ request: FlightSearchRequest) async throws -> [Flight]
+}
+
+public struct CtripAPIConfiguration: Sendable {
+    public var endpoint: URL
+    public var apiKey: String?
+    public var useMockData: Bool
+
     public init(
         endpoint: URL = URL(string: "https://api.example.invalid/ctrip/flights")!,
         apiKey: String? = nil,
