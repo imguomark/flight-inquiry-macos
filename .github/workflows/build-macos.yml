@@ -1,4 +1,4 @@
-name: Build Java macOS app
+name: Build Java JAR
 
 on:
   workflow_dispatch:
@@ -15,20 +15,17 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-      - name: Compile Java app
+      - name: Compile and package executable JAR
         run: mvn --batch-mode package
-      - name: Build Apple Silicon app bundle
-        run: |
-          mkdir -p dist
-          jpackage --type app-image --name FlightInquiry --input target --main-jar flight-inquiry-1.0.0.jar --main-class com.imguomark.flightinquiry.FlightInquiryApp --dest dist --mac-package-identifier com.imguomark.flightinquiry
-          file dist/FlightInquiry.app/Contents/MacOS/FlightInquiry
-      - name: Upload FlightInquiry.app
+      - name: Verify JAR
+        run: jar tf target/flight-inquiry-1.0.0.jar | grep FlightInquiryApp.class
+      - name: Upload executable JAR
         uses: actions/upload-artifact@v4
         with:
-          name: FlightInquiry-macOS-arm64
-          path: dist/FlightInquiry.app
+          name: FlightInquiry-java-jar
+          path: target/flight-inquiry-1.0.0.jar
           if-no-files-found: error
