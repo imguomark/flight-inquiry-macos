@@ -1,13 +1,18 @@
 package com.imguomark.flightinquiry;
 
+
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
 import java.net.URI;
 import java.net.http.*;
 import java.time.Duration;
 import java.util.*;
 import java.util.regex.*;
+
 
 public final class FlightInquiryApp {
   private final JTextField origin = new JTextField("SFO", 5), destination = new JTextField("PVG", 5);
@@ -34,14 +39,3 @@ public final class FlightInquiryApp {
     }.execute();
   }
   private List<Flight> openSky() throws Exception {
-    HttpRequest r=HttpRequest.newBuilder(URI.create("https://opensky-network.org/api/states/all")).timeout(Duration.ofSeconds(20)).GET().build();
-    HttpResponse<String> response=client.send(r,HttpResponse.BodyHandlers.ofString());
-    if(response.statusCode()<200 || response.statusCode()>=300) throw new IllegalStateException("OpenSky HTTP "+response.statusCode());
-    List<Flight> out=new ArrayList<>(); Matcher rows=Pattern.compile("\\[\\s*\\\"([^\\\"]*)\\\"\\s*,\\s*\\\"([^\\\"]*)\\\"",Pattern.DOTALL).matcher(response.body());
-    while(rows.find() && out.size()<40) out.add(new Flight(rows.group(1),rows.group(2),"Live aircraft state")); return out;
-  }
-  private List<Flight> mock(String from,String to) { return List.of(new Flight("MOCK-"+from+to+"-1","Demo carrier","Offline route-aware result"),new Flight("MOCK-"+from+to+"-2","Demo carrier","Generated for "+from+" to "+to)); }
-  private void render(List<Flight> fs,String from,String to) { if(fs.isEmpty()){status.setText("No aircraft activity returned. OpenSky is not a schedule API.");results.setText("No results.\n");return;} status.setText(fs.size()+" aircraft records returned; route matching is not guaranteed."); StringBuilder b=new StringBuilder("Route: "+from+" -> "+to+"\n\n"); for(Flight x:fs)b.append(String.format("%-20s %-26s %s%n",x.id,x.airline,x.detail)); results.setText(b.toString()); }
-  private static String message(Exception e){ Throwable t=e; while(t.getCause()!=null)t=t.getCause(); return t.getMessage()==null?t.toString():t.getMessage(); }
-  private record Flight(String id,String airline,String detail) {}
-}
