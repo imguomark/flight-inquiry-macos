@@ -28,6 +28,46 @@ jobs:
 
       - name: Build app bundle
         run: |
+          sed -i '' 's/\r$//' scripts/build-app.sh
+          chmod +x scripts/build-app.sh
+          ./scripts/build-app.sh
+
+      - name: Upload FlightInquiry.app
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlightInquiry-macOS
+          path: FlightInquiry.app
+          if-no-files-found: error
+name: Build macOS app
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "Package.swift"
+      - "Sources/**"
+      - "Tests/**"
+      - "scripts/**"
+      - ".github/workflows/build-macos.yml"
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "15.4"
+
+      - name: Run tests
+        run: swift test
+
+      - name: Build app bundle
+        run: |
           chmod +x scripts/build-app.sh
           ./scripts/build-app.sh
 
