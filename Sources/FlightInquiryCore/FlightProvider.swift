@@ -65,8 +65,6 @@ public struct CtripAPIClient: FlightProviding {
         urlRequest.httpMethod = "GET"
         if let apiKey = configuration.apiKey {
             urlRequest.setValue("Bearer " + apiKey, forHTTPHeaderField: "Authorization")
-            urlRequest.setValue("Bearer " + apiKey, forHTTPHeaderField: "Authorization")
-            urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
         do {
             let (data, response) = try await session.data(for: urlRequest)
