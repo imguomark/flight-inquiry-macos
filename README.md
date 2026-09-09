@@ -16,7 +16,9 @@ swift test
 swift run FlightInquiryApp
 ```
 
-The app starts with mock data enabled. Search for any route to see sample schedules, stops, duration, and USD fares.
+The app starts with route-aware demo data enabled. Different airport pairs generate different
+flight IDs, departure times, and fares so it is clear that the search request is being used.
+These are clearly labeled demo values, not live inventory.
 
 ## Build a `.app`
 
@@ -64,6 +66,13 @@ swift run FlightInquiryApp
 ```
 
 **Caveat:** Ctrip API access, authentication requirements, endpoint, request parameters, and response schema must be supplied by an authorized Ctrip integration/provider. This project does not invent credentials or claim that the placeholder schema matches a production Ctrip API. Adapt the request and decoder to the official documentation you have access to before disabling mock mode.
+
+There is no reliable, unrestricted public API that provides live bookable schedules and fares
+from Booking.com or Trip.com without credentials or a partner agreement. Public flight APIs
+that can be called anonymously generally expose aircraft positions, not route search or ticket
+prices, so this app does not present them as a substitute for booking inventory. A real
+provider should be added as another `FlightProviding` implementation once an authorized API
+contract is available.
 
 ## Tests
 

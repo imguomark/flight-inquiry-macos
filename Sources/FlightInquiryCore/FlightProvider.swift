@@ -41,8 +41,9 @@ public struct CtripAPIClient: FlightProviding {
     }
 
     public func search(_ request: FlightSearchRequest) async throws -> [Flight] {
-        guard !request.origin.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !request.destination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard request.origin.count == 3, request.destination.count == 3,
+              request.origin.allSatisfy(\.isLetter), request.destination.allSatisfy(\.isLetter),
+              request.origin != request.destination else {
             throw FlightSearchError.invalidRequest("Enter both an origin and destination.")
         }
         guard request.passengers > 0 else {
@@ -63,6 +64,8 @@ public struct CtripAPIClient: FlightProviding {
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "GET"
         if let apiKey = configuration.apiKey {
+            urlRequest.setValue("Bearer " + apiKey, forHTTPHeaderField: "Authorization")
+            urlRequest.setValue("Bearer " + apiKey, forHTTPHeaderField: "Authorization")
             urlRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
         do {
@@ -135,17 +138,35 @@ extension Flight: Codable {
 public enum MockFlightData {
     public static func flights(for request: FlightSearchRequest) -> [Flight] {
         let calendar = Calendar.current
-        let start = calendar.date(bySettingHour: 8, minute: 15, second: 0, of: request.date) ?? request.date
-        return [
-            Flight(id: "mock-1", airline: "Skyward Airlines", flightNumber: "SW 218", departureTime: start,
-                   arrivalTime: start.addingTimeInterval(3.5 * 3600), durationMinutes: 210, stops: 0,
-                   price: 428, currency: "USD"),
-            Flight(id: "mock-2", airline: "Pacific Air", flightNumber: "PA 704", departureTime: start.addingTimeInterval(2 * 3600),
-                   arrivalTime: start.addingTimeInterval(7.25 * 3600), durationMinutes: 315, stops: 1,
-                   price: 296, currency: "USD"),
-            Flight(id: "mock-3", airline: "MetroJet", flightNumber: "MJ 91", departureTime: start.addingTimeInterval(5 * 3600),
-                   arrivalTime: start.addingTimeInterval(9 * 3600), durationMinutes: 240, stops: 0,
-                   price: 512, currency: "USD")
+        let seed = request.origin.unicodeScalars.reduce(0) { $0 + Int($1.value) }
+            + request.destination.unicodeScalars.reduce(0) { $0 + Int($1.value) }
+        let start = calendar.date(bySettingHour: 6 + seed % 5, minute: seed % 4 * 15, second: 0, of: request.date) ?? request.date
+        let route = "\(request.origin)-\(request.destination)"
+        let basePrice = Decimal(220 + seed % 180)
+        let catalogs = [
+            [("United Airlines", "UA"), ("China Eastern", "MU"), ("ANA", "NH"), ("Air Canada", "AC"), ("Delta", "DL")],
+            [("Singapore Airlines", "SQ"), ("Cathay Pacific", "CX"), ("Lufthansa", "LH"), ("Emirates", "EK"), ("Qantas", "QF")],
+            [("American Airlines", "AA"), ("British Airways", "BA"), ("Korean Air", "KE"), ("JAL", "JL"), ("Air France", "AF")]
         ]
+        let catalog = catalogs[seed % catalogs.count]
+        let count = 3 + seed % 3
+
+        return (0..<count).map { index in
+            let airline = catalog[(seed + index) % catalog.count]
+            let stops = index == 0 || index == 2 ? 0 : 1
+            let duration = 190 + index * 35 + seed % 30
+            let departure = start.addingTimeInterval(Double(index * 95) * 60)
+            return Flight(
+                id: "\(route)-\(airline.1)-\(index)",
+                airline: airline.0,
+                flightNumber: "\(airline.1) \(100 + (seed * 7 + index * 53) % 800)",
+                departureTime: departure,
+                arrivalTime: departure.addingTimeInterval(Double(duration + stops * 45) * 60),
+                durationMinutes: duration + stops * 45,
+                stops: stops,
+                price: basePrice + Decimal(index * 58 - (index == 1 ? 12 : 0)),
+                currency: "USD"
+            )
+        }
     }
 }

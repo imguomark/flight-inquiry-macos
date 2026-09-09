@@ -7,10 +7,53 @@ public struct FlightSearchRequest: Equatable, Sendable {
     public var passengers: Int
 
     public init(origin: String, destination: String, date: Date, passengers: Int = 1) {
-        self.origin = origin
-        self.destination = destination
+        self.origin = origin.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        self.destination = destination.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         self.date = date
         self.passengers = passengers
+    }
+
+}
+
+public enum FlightSort: String, CaseIterable, Identifiable, Sendable {
+    case recommended
+    case price
+    case duration
+    case departure
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .recommended: "Recommended"
+        case .price: "Lowest price"
+        case .duration: "Shortest duration"
+        case .departure: "Earliest departure"
+        }
+    }
+}
+
+public struct FlightFilters: Equatable, Sendable {
+    public var nonstopOnly = false
+    public var sort: FlightSort = .recommended
+
+    public init(nonstopOnly: Bool = false, sort: FlightSort = .recommended) {
+        self.nonstopOnly = nonstopOnly
+        self.sort = sort
+    }
+
+    public func applying(to flights: [Flight]) -> [Flight] {
+        let filtered = nonstopOnly ? flights.filter { $0.stops == 0 } : flights
+        switch sort {
+        case .recommended:
+            return filtered
+        case .price:
+            return filtered.sorted { $0.price < $1.price }
+        case .duration:
+            return filtered.sorted { $0.durationMinutes < $1.durationMinutes }
+        case .departure:
+            return filtered.sorted { $0.departureTime < $1.departureTime }
+        }
     }
 }
 

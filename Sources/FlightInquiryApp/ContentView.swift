@@ -10,6 +10,7 @@ final class FlightSearchViewModel: ObservableObject {
     @Published private(set) var flights: [Flight] = []
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
+    @Published var filters = FlightFilters()
     private let provider: any FlightProviding
 
     init(provider: any FlightProviding = CtripAPIClient()) {
@@ -27,8 +28,17 @@ final class FlightSearchViewModel: ObservableObject {
                 flights = []
                 errorMessage = error.localizedDescription
             }
+
             isLoading = false
         }
+    }
+
+    var visibleFlights: [Flight] {
+        filters.applying(to: flights)
+    }
+
+    func swapRoute() {
+        (origin, destination) = (destination, origin)
     }
 }
 
@@ -41,6 +51,11 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     header
                     searchCard
+                    if !model.flights.isEmpty {
+                        Text("Demo results · not live inventory")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                     results
                 }
                 .padding(32)
@@ -66,8 +81,11 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 14) {
                 field("From", text: $model.origin, icon: "airplane.departure")
-                Image(systemName: "arrow.right")
-                    .foregroundStyle(.secondary)
+                Button(action: model.swapRoute) {
+                    Image(systemName: "arrow.left.arrow.right")
+                }
+                .buttonStyle(.borderless)
+                .help("Swap origin and destination")
                 field("To", text: $model.destination, icon: "airplane.arrival")
             }
             HStack {
@@ -113,8 +131,25 @@ struct ContentView: View {
             stateView(icon: "airplane", title: "Ready when you are", message: "Enter your route and date to see flight options.")
         } else {
             VStack(alignment: .leading, spacing: 12) {
-                Text("\(model.flights.count) flight options").font(.title3.bold())
-                ForEach(model.flights) { flight in FlightRow(flight: flight) }
+                HStack {
+                    Text("\(model.visibleFlights.count) flight options").font(.title3.bold())
+                    Spacer()
+                    Toggle("Nonstop only", isOn: $model.filters.nonstopOnly)
+                        .toggleStyle(.checkbox)
+                    Picker("Sort", selection: $model.filters.sort) {
+                        ForEach(FlightSort.allCases) { sort in
+                            Text(sort.title).tag(sort)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                }
+                if model.visibleFlights.isEmpty {
+                    stateView(icon: "line.3.horizontal.decrease.circle", title: "No matching flights",
+                              message: "Try turning off Nonstop only or choosing another route.")
+                } else {
+                    ForEach(model.visibleFlights) { flight in FlightRow(flight: flight) }
+                }
             }
         }
     }
